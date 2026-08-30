@@ -1062,14 +1062,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self.send_json(404, {"error": "Rota não encontrada."})
-            self.send_json(200, {
-                "api_football": bool(API_FOOTBALL_KEY),
-                "bigballs": bool(BIGBALLS_KEY)
-            })
-            return
-
-        self.send_json(404, {"error": "Rota não encontrada."})
-
+            
 if __name__ == "__main__":
     print("Servidor LOTOSCANNER em http://localhost:8000")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
