@@ -64,6 +64,9 @@ class Engine:
         canonical_id,
         venue,
         before,
+        competition_provider=None,
+        competition_id=None,
+        season=None,
     ):
         with db.connect() as c:
             rows = c.execute(
@@ -73,6 +76,9 @@ class Engine:
                 WHERE canonical_id = ?
                 AND venue = ?
                 AND match_date < ?
+                AND (? IS NULL OR competition_provider = ?)
+                AND (? IS NULL OR competition_id = ?)
+                AND (? IS NULL OR season = ?)
                 ORDER BY match_date DESC
                 LIMIT ?
                 """,
@@ -80,6 +86,9 @@ class Engine:
                     canonical_id,
                     venue,
                     before,
+                    competition_provider, competition_provider,
+                    competition_id, competition_id,
+                    season, season,
                     JANELA,
                 ),
             ).fetchall()
@@ -286,6 +295,9 @@ class Engine:
     def _historical_params(
         self,
         before,
+        competition_provider=None,
+        competition_id=None,
+        season=None,
     ):
         valores = {
             feature: []
@@ -298,10 +310,18 @@ class Engine:
                 SELECT source_fixture_id, match_date
                 FROM raw_stats
                 WHERE match_date < ?
+                AND (? IS NULL OR competition_provider = ?)
+                AND (? IS NULL OR competition_id = ?)
+                AND (? IS NULL OR season = ?)
                 GROUP BY source_fixture_id, match_date
                 ORDER BY match_date ASC
                 """,
-                (before,),
+                (
+                    before,
+                    competition_provider, competition_provider,
+                    competition_id, competition_id,
+                    season, season,
+                ),
             ).fetchall()
 
         for fixture in fixtures:
@@ -319,10 +339,16 @@ class Engine:
                     FROM raw_stats
                     WHERE source_fixture_id = ?
                     AND match_date = ?
+                    AND (? IS NULL OR competition_provider = ?)
+                    AND (? IS NULL OR competition_id = ?)
+                    AND (? IS NULL OR season = ?)
                     """,
                     (
                         fixture_id,
                         match_date,
+                        competition_provider, competition_provider,
+                        competition_id, competition_id,
+                        season, season,
                     ),
                 ).fetchall()
 
@@ -349,12 +375,18 @@ class Engine:
                 casa_id,
                 "HOME",
                 match_date,
+                competition_provider,
+                competition_id,
+                season,
             )
 
             visitante_records = self._records(
                 visitante_id,
                 "AWAY",
                 match_date,
+                competition_provider,
+                competition_id,
+                season,
             )
 
             if not casa_records:
@@ -632,6 +664,9 @@ class Engine:
         away_id = g.get(
             "away_canonical_id"
         )
+        competition_provider = g.get("competition_provider")
+        competition_id = g.get("competition_id")
+        season = g.get("season")
 
         if not home_id:
             return {
@@ -649,12 +684,18 @@ class Engine:
             home_id,
             "HOME",
             before,
+            competition_provider,
+            competition_id,
+            season,
         )
 
         visitante_records = self._records(
             away_id,
             "AWAY",
             before,
+            competition_provider,
+            competition_id,
+            season,
         )
 
         if not casa_records:
@@ -694,7 +735,10 @@ class Engine:
         )
 
         params = self._historical_params(
-            before
+            before,
+            competition_provider,
+            competition_id,
+            season,
         )
 
         if not params:

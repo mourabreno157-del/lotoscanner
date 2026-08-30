@@ -37,8 +37,15 @@ def init():
             id INTEGER PRIMARY KEY AUTOINCREMENT, source_fixture_id TEXT,
             canonical_id TEXT NOT NULL, venue TEXT NOT NULL, match_date TEXT NOT NULL,
             payload_json TEXT NOT NULL)""")
+        if not _has_column(c, "raw_stats", "competition_provider"):
+            c.execute("ALTER TABLE raw_stats ADD COLUMN competition_provider TEXT")
+        if not _has_column(c, "raw_stats", "competition_id"):
+            c.execute("ALTER TABLE raw_stats ADD COLUMN competition_id TEXT")
+        if not _has_column(c, "raw_stats", "season"):
+            c.execute("ALTER TABLE raw_stats ADD COLUMN season TEXT")
         c.execute("CREATE INDEX IF NOT EXISTS idx_raw_stats_team_venue_date ON raw_stats(canonical_id, venue, match_date)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_raw_stats_fixture_date ON raw_stats(source_fixture_id, match_date)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_raw_stats_competition_date ON raw_stats(competition_provider, competition_id, season, match_date)")
         c.commit()
 
 init()

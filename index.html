@@ -230,6 +230,8 @@ async function analisar() {
             return;
         }
 
+        const selectedCompetition = competicaoData.results[0];
+
         const [resCasa, resFora] = await Promise.all([
             fetch("/api/identify?name=" + encodeURIComponent(casa)),
             fetch("/api/identify?name=" + encodeURIComponent(fora))
@@ -250,11 +252,57 @@ async function analisar() {
         const casaTeam = casaData.results[0];
         const foraTeam = foraData.results[0];
 
+        resultado.textContent = "Localizando a data da partida...";
+
+        const proximoJogo = await fetch(
+            "/api/next-fixture?home_id=" + encodeURIComponent(casaTeam.canonical_id || casaTeam.id) +
+            "&away_id=" + encodeURIComponent(foraTeam.canonical_id || foraTeam.id) +
+            "&competition_id=" + encodeURIComponent(selectedCompetition.id || "") +
+            "&competition=" + encodeURIComponent(selectedCompetition.name || competicao)
+        );
+
+        if (!proximoJogo.ok) {
+            const erroData = await proximoJogo.json().catch(() => ({}));
+            throw new Error(
+                erroData.error ||
+                "Não foi possível localizar a data da partida."
+            );
+        }
+
+        const fixtureData = await proximoJogo.json();
+        const dataJogo = fixtureData.date;
+
+        resultado.textContent = "Carregando base histórica da competição...";
+
+        const baseHistory = await fetch(
+            "/api/history-base?league_id=" + encodeURIComponent(fixtureData.competition_id) +
+            "&season=" + encodeURIComponent(fixtureData.season) +
+            "&provider=" + encodeURIComponent(fixtureData.competition_provider || selectedCompetition.provider || "api-football") +
+            "&competition_name=" + encodeURIComponent(fixtureData.competition || selectedCompetition.name || competicao) +
+            "&before=" + encodeURIComponent(dataJogo)
+        );
+
+        if (!baseHistory.ok) {
+            const erroData = await baseHistory.json().catch(() => ({}));
+            throw new Error(
+                erroData.error ||
+                "Não foi possível carregar a base histórica da competição."
+            );
+        }
+
         resultado.textContent = "Coletando histórico...";
 
         const [histCasa, histFora] = await Promise.all([
-            fetch("/api/history?team_id=" + encodeURIComponent(casaTeam.canonical_id || casaTeam.id) + "&venue=HOME"),
-            fetch("/api/history?team_id=" + encodeURIComponent(foraTeam.canonical_id || foraTeam.id) + "&venue=AWAY")
+            fetch("/api/history?team_id=" + encodeURIComponent(casaTeam.canonical_id || casaTeam.id) +
+                "&venue=HOME&competition_id=" + encodeURIComponent(fixtureData.competition_id) +
+                "&season=" + encodeURIComponent(fixtureData.season) +
+                "&before=" + encodeURIComponent(dataJogo) +
+                "&provider=" + encodeURIComponent(fixtureData.competition_provider || selectedCompetition.provider || "api-football")),
+            fetch("/api/history?team_id=" + encodeURIComponent(foraTeam.canonical_id || foraTeam.id) +
+                "&venue=AWAY&competition_id=" + encodeURIComponent(fixtureData.competition_id) +
+                "&season=" + encodeURIComponent(fixtureData.season) +
+                "&before=" + encodeURIComponent(dataJogo) +
+                "&provider=" + encodeURIComponent(fixtureData.competition_provider || selectedCompetition.provider || "api-football"))
         ]);
 
         if (!histCasa.ok || !histFora.ok) {
@@ -270,13 +318,14 @@ async function analisar() {
         // Por enquanto exibimos os dados identificados e o histórico coletado.
         const homeId = casaTeam.canonical_id || casaTeam.id;
         const awayId = foraTeam.canonical_id || foraTeam.id;
-        const dataJogo = new Date().toISOString().slice(0, 10);
-
         const analise = await fetch(
             "/api/analyze?home_id=" + encodeURIComponent(homeId) +
             "&away_id=" + encodeURIComponent(awayId) +
             "&date=" + encodeURIComponent(dataJogo) +
-            "&competition=" + encodeURIComponent(competicao) +
+            "&competition=" + encodeURIComponent(selectedCompetition.name || competicao) +
+            "&competition_id=" + encodeURIComponent(fixtureData.competition_id) +
+            "&competition_provider=" + encodeURIComponent(fixtureData.competition_provider || selectedCompetition.provider || "api-football") +
+            "&season=" + encodeURIComponent(fixtureData.season) +
             "&home_name=" + encodeURIComponent(casaTeam.name) +
             "&away_name=" + encodeURIComponent(foraTeam.name)
         );
