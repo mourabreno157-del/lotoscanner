@@ -462,6 +462,26 @@ class Handler(BaseHTTPRequestHandler):
             })
             return
 
+        if parsed.path == "/":
+            try:
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+                index_path = os.path.join(base_dir, "index.html")
+
+                with open(index_path, "rb") as f:
+                    body = f.read()
+
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception as exc:
+                self.send_json(500, {
+                    "error": "Falha ao carregar a página.",
+                    "detail": str(exc)
+                })
+            return
+
         self.send_json(404, {"error": "Rota não encontrada."})
 
 if __name__ == "__main__":
