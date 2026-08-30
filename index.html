@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="/manifest.json">
+<title>Analisador de Jogos</title>
+<style>
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: Arial, sans-serif;
+    background: #f4f4f4;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+@media (min-width: 700px) {
+    body { align-items: center; }
+}
+.container {
+    width: 100%;
+    max-width: 520px;
+    padding: 16px;
+}
+}
+.card {
+    background: white;
+    padding: 24px 18px;
+    border-radius: 18px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.08);
+}
+h1 {
+    text-align: center;
+    margin: 0 0 28px;
+    font-size: 25px;
+}
+label {
+    display: block;
+    margin: 0 0 7px;
+    font-weight: bold;
+}
+input {
+    width: 100%;
+    padding: 15px 14px;
+    margin-bottom: 16px;
+    border: 1px solid #ccc;
+    border-radius: 9px;
+    font-size: 16px;
+}
+button {
+    width: 100%;
+    padding: 16px;
+    border: 0;
+    border-radius: 9px;
+    font-size: 17px;
+    font-weight: bold;
+    cursor: pointer;
+}
+#resultado {
+    margin-top: 22px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="card">
+        <h1 style="margin-bottom:8px;">Analisador de Jogos</h1>
+        <div style="text-align:center;color:#777;font-size:13px;margin-bottom:24px;">
+            Análise matemática de partidas
+        </div>
+        <div id="status" style="text-align:center;font-size:14px;margin:-14px 0 20px;color:#666;">
+            Banco próprio local ativo
+        </div>
+
+        <label for="casa">Time da Casa</label>
+        <input id="casa" type="text" placeholder="Digite o time da casa">
+
+        <label for="fora">Time Visitante</label>
+        <input id="fora" type="text" placeholder="Digite o time visitante">
+
+        <label for="competicao">Competição</label>
+        <input id="competicao" type="text" placeholder="Digite a competição">
+
+        <button onclick="analisar()">ANALISAR</button>
+        <button onclick="limparJogo()" style="margin-top:8px;background:#eee;color:#222;">
+            LIMPAR
+        </button>
+        <button onclick="abrirGrade()" style="margin-top:10px;background:#e9e9e9;">
+            GRADE COM 14 JOGOS
+        </button>
+        <button onclick="abrirHistorico()" style="margin-top:10px;background:#e9e9e9;">
+            HISTÓRICO
+        </button>
+
+        <div id="appNav" style="display:flex;gap:8px;margin-bottom:18px;">
+            <button onclick="mostrarModo('jogo')" style="flex:1;padding:11px;font-size:13px;">
+                JOGO
+            </button>
+            <button onclick="mostrarModo('grade')" style="flex:1;padding:11px;font-size:13px;">
+                GRADE
+            </button>
+            <button onclick="abrirHistorico()" style="flex:1;padding:11px;font-size:13px;">
+                HISTÓRICO
+            </button>
+        </div>
+
+        <div id="inicio" style="text-align:center;margin-bottom:22px;">
+            <div style="font-size:14px;color:#777;margin-bottom:12px;">
+                Escolha o tipo de análise
+            </div>
+            <button onclick="mostrarModo('jogo')" style="margin-bottom:8px;">
+                JOGO ÚNICO
+            </button>
+            <button onclick="mostrarModo('grade')" style="background:#eee;color:#222;">
+                GRADE 14 JOGOS
+            </button>
+        </div>
+
+        <div id="modoJogo"><div id="resultado"></div></div>
+        <div id="grade" style="display:none;margin-top:22px;"></div><div id="historico" style="display:none;margin-top:22px;"></div>
+    </div>
+</div>
+
+<script>
+const DB_NAME = "AnalisadorJogosDB";
+const DB_VERSION = 1;
+
+function abrirBanco() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onupgradeneeded = () => {
+            const db = request.result;
+
+            if (!db.objectStoreNames.contains("times")) {
+                const times = db.createObjectStore("times", {
+                    keyPath: "id",
+                    autoIncrement: true
+                });
+                times.createIndex("nome", "nome", { unique: false });
+                times.createIndex("api_id", "api_id", { unique: false });
+            }
+
+            if (!db.objectStoreNames.contains("competicoes")) {
+                db.createObjectStore("competicoes", {
+                    keyPath: "id",
+                    autoIncrement: true
+                });
+            }
+
+            if (!db.objectStoreNames.contains("jogos")) {
+                const jogos = db.createObjectStore("jogos", {
+                    keyPath: "id",
+                    autoIncrement: true
+                });
+                jogos.createIndex("data", "data", { unique: false });
+            }
+
+            if (!db.objectStoreNames.contains("historico")) {
+                db.createObjectStore("historico", {
+                    keyPath: "id",
+                    autoIncrement: true
+                });
+            }
+        };
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function salvarJogo(jogo) {
+    const db = await abrirBanco();
+
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction("jogos", "readwrite");
+        tx.objectStore("jogos").add(jogo);
+
+        tx.oncomplete = () => {
+            db.close();
+            resolve();
+        };
+
+        tx.onerror = () => {
+            db.close();
+            reject(tx.error);
+        };
+    });
+}
+
+async function analisar() {
+    const casa = document.getElementById("casa").value.trim();
+    const fora = document.getElementById("fora").value.trim();
+    const competicao = document.getElementById("competicao").value.trim();
+    const resultado = document.getElementById("resultado");
+
+    if (!casa || !fora || !competicao) {
+        resultado.textContent = "Preencha todos os campos.";
+        return;
+    }
+
+    try {
+        await salvarJogo({
+            casa,
+            fora,
+            competicao,
+            data: new Date().toISOString()
+        });
+
+        resultado.textContent = "Identificando competição e times...";
+
+        const resCompeticao = await fetch(
+            "/api/competition?name=" + encodeURIComponent(competicao)
+        );
+
+        if (!resCompeticao.ok) {
+            throw new Error("Falha na identificação da competição.");
+        }
+
+        const competicaoData = await resCompeticao.json();
+
+        if (!competicaoData.results.length) {
+            resultado.textContent = "Competição não encontrada.";
+            return;
+        }
+
+        const [resCasa, resFora] = await Promise.all([
+            fetch("/api/identify?name=" + encodeURIComponent(casa)),
+            fetch("/api/identify?name=" + encodeURIComponent(fora))
+        ]);
+
+        if (!resCasa.ok || !resFora.ok) {
+            throw new Error("Servidor de identificação indisponível.");
+        }
+
+        const casaData = await resCasa.json();
+        const foraData = await resFora.json();
+
+        if (!casaData.results.length || !foraData.results.length) {
+            resultado.textContent = "Time não encontrado na fonte disponível.";
+            return;
+        }
+
+        const casaTeam = casaData.results[0];
+        const foraTeam = foraData.results[0];
+
+        resultado.textContent = "Coletando histórico...";
+
+        const [histCasa, histFora] = await Promise.all([
+            fetch("/api/history?team_id=" + encodeURIComponent(casaTeam.canonical_id || casaTeam.id) + "&venue=HOME"),
+            fetch("/api/history?team_id=" + encodeURIComponent(foraTeam.canonical_id || foraTeam.id) + "&venue=AWAY")
+        ]);
+
+        if (!histCasa.ok || !histFora.ok) {
+            throw new Error("Não foi possível coletar o histórico.");
+        }
+
+        const casaHistory = await histCasa.json();
+        const foraHistory = await histFora.json();
+
+        resultado.textContent = "Executando matemática...";
+
+        // A etapa de análise será executada pelo motor Python.
+        // Por enquanto exibimos os dados identificados e o histórico coletado.
+        const homeId = casaTeam.canonical_id || casaTeam.id;
+        const awayId = foraTeam.canonical_id || foraTeam.id;
+        const dataJogo = new Date().toISOString().slice(0, 10);
+
+        const analise = await fetch(
+            "/api/analyze?home_id=" + encodeURIComponent(homeId) +
+            "&away_id=" + encodeURIComponent(awayId) +
+            "&date=" + encodeURIComponent(dataJogo) +
+            "&competition=" + encodeURIComponent(competicao) +
+            "&home_name=" + encodeURIComponent(casaTeam.name) +
+            "&away_name=" + encodeURIComponent(foraTeam.name)
+        );
+
+        if (!analise.ok) {
+            throw new Error("Motor matemático indisponível.");
+        }
+
+        const resultadoMotor = await analise.json();
+
+        if (resultadoMotor.status !== "OK") {
+            resultado.textContent = "Sem dados suficientes para calcular.";
+            return;
+        }
+
+        const p = resultadoMotor.probabilities;
+        const prediction = resultadoMotor.prediction;
+
+        const p1 = (p["1"] * 100).toFixed(1);
+        const px = (p["X"] * 100).toFixed(1);
+        const p2 = (p["2"] * 100).toFixed(1);
+
+        resultado.innerHTML =
+            "<div style='padding:4px 0'>" +
+            "<div style='font-size:13px;color:#777;margin-bottom:6px'>" +
+            competicao + "</div>" +
+            "<div style='font-size:20px;font-weight:bold'>" +
+            casaTeam.name + " × " + foraTeam.name +
+            "</div>" +
+            "<div style='font-size:42px;font-weight:bold;margin:18px 0'>" +
+            prediction + "</div>" +
+            "<div style='display:flex;justify-content:space-between;font-size:14px;font-weight:normal'>" +
+            "<span>1<br><strong>" + p1 + "%</strong></span>" +
+            "<span>X<br><strong>" + px + "%</strong></span>" +
+            "<span>2<br><strong>" + p2 + "%</strong></span>" +
+            "</div>" +
+            "<div style='margin-top:20px;font-size:12px;color:#777'>" +
+            "Resultado calculado pelo motor matemático." +
+            "</div>" +
+            "</div>";
+
+        console.log("RESULTADO:", resultadoMotor);
+
+    } catch (erro) {
+        resultado.textContent = "Banco salvo. Servidor de identificação não conectado.";
+        console.error(erro);
+    }
+}
+
+function abrirGrade() {
+    const grade = document.getElementById("grade");
+    grade.style.display = "block";
+
+    let html = "<div style='font-size:20px;font-weight:bold;margin-bottom:14px'>Grade</div>";
+
+    for (let i = 1; i <= 14; i++) {
+        html +=
+            "<div style='border-top:1px solid #ddd;padding:12px 0'>" +
+            "<div style='font-weight:bold;margin-bottom:8px'>Jogo " + i + "</div>" +
+            "<input id='gradeCasa" + i + "' type='text' placeholder='Time da casa' style='margin-bottom:8px'>" +
+            "<input id='gradeFora" + i + "' type='text' placeholder='Time visitante' style='margin-bottom:0'>" +
+            "</div>";
+    }
+
+    html +=
+        "<button onclick='analisarGrade()' style='margin-top:8px'>" +
+        "ANALISAR GRADE</button>" +
+        "<div id='resultadoGrade' style='margin-top:18px;text-align:center;font-weight:bold'></div>";
+
+    grade.innerHTML = html;
+}
+
+async function analisarGrade() {
+    const jogos = [];
+    const saida = document.getElementById("resultadoGrade");
+
+    for (let i = 1; i <= 14; i++) {
+        const casa = document.getElementById("gradeCasa" + i).value.trim();
+        const fora = document.getElementById("gradeFora" + i).value.trim();
+
+        if (!casa || !fora) {
+            saida.textContent = "Preencha os 14 jogos.";
+            return;
+        }
+
+        jogos.push({
+            numero: i,
+            date: new Date().toISOString().slice(0, 10),
+            home_canonical_id: "",
+            away_canonical_id: "",
+            casa,
+            fora
+        });
+    }
+
+    saida.textContent = "Aguardando identificação dos 14 jogos...";
+
+    try {
+        // Identificação simples: primeiro resultado disponível de cada time.
+        // A etapa seguinte poderá transformar esses resultados em IDs antes
+        // de chamar o motor, sem alterar a matemática.
+        for (const jogo of jogos) {
+            const [a, b] = await Promise.all([
+                fetch("/api/identify?name=" + encodeURIComponent(jogo.casa)),
+                fetch("/api/identify?name=" + encodeURIComponent(jogo.fora))
+            ]);
+
+            if (!a.ok || !b.ok) throw new Error("Falha na identificação.");
+
+            const casaData = await a.json();
+            const foraData = await b.json();
+
+            if (!casaData.results.length || !foraData.results.length) {
+                throw new Error("Não foi possível identificar todos os times.");
+            }
+
+            jogo.home_canonical_id = String(casaData.results[0].canonical_id || casaData.results[0].id);
+            jogo.away_canonical_id = String(foraData.results[0].canonical_id || foraData.results[0].id);
+        }
+
+        saida.textContent = "Executando otimização da grade...";
+
+        const response = await fetch(
+            "/api/analyze-grade?games=" +
+            encodeURIComponent(JSON.stringify(jogos))
+        );
+
+        if (!response.ok) throw new Error("Falha no motor da grade.");
+
+        const data = await response.json();
+        const resultados = data.results;
+
+        let resumo = "<div style='text-align:left'>";
+        for (const r of resultados) {
+            resumo += "<div style='padding:10px 0;border-top:1px solid #ddd'>" +
+                "<strong>" + (r.game.numero || "") + ".</strong> " +
+                (r.game.casa || "") + " × " + (r.game.fora || "");
+
+            if (r.status === "OK") {
+                let selecao = r.prediction;
+                let tipo = "SIMPLES";
+
+                if (r.uncertainty === 2) {
+                    selecao = "1X2";
+                    tipo = "TRIPLO";
+                } else if (r.uncertainty === 1) {
+                    const p = r.probabilities;
+                    const entries = Object.entries(p).sort((a, b) => b[1] - a[1]);
+                    selecao = entries.slice(0, 2).map(x => x[0]).join("");
+                    tipo = "DUPLO";
+                }
+
+                resumo +=
+                    "<div style='margin-top:8px;display:flex;align-items:center;justify-content:space-between'>" +
+                    "<span style='font-size:26px;font-weight:bold'>" + selecao + "</span>" +
+                    "<span style='font-size:11px;padding:5px 8px;border:1px solid #ccc;border-radius:8px'>" +
+                    tipo + "</span>" +
+                    "</div>" +
+                    "<div style='margin-top:5px;font-size:12px;font-weight:normal'>" +
+                    "1 " + (r.probabilities["1"] * 100).toFixed(1) + "% · " +
+                    "X " + (r.probabilities["X"] * 100).toFixed(1) + "% · " +
+                    "2 " + (r.probabilities["2"] * 100).toFixed(1) + "%" +
+                    "</div>";
+            } else {
+                resumo += "<br><span style='font-size:13px'>Sem dados suficientes</span>";
+            }
+
+            resumo += "</div>";
+        }
+
+        const qtdSimples = resultados.filter(r => r.status === "OK" && r.uncertainty === 0).length;
+        const qtdDuplos = resultados.filter(r => r.status === "OK" && r.uncertainty === 1).length;
+        const qtdTriplos = resultados.filter(r => r.status === "OK" && r.uncertainty === 2).length;
+
+        resumo +=
+            "<div style='border-top:2px solid #222;margin-top:14px;padding-top:14px;text-align:center'>" +
+            "<strong>RESUMO DA GRADE</strong><br>" +
+            "<span style='font-size:13px;font-weight:normal'>" +
+            qtdSimples + " simples · " +
+            qtdDuplos + " duplo · " +
+            qtdTriplos + " triplo" +
+            "</span>" +
+            "<button onclick='copiarGrade()' style='margin-top:12px'>" +
+            "COPIAR GRADE" +
+            "</button>" +
+            "<button onclick='compartilharGrade()' style='margin-top:8px;background:#eee;color:#222'>" +
+            "COMPARTILHAR" +
+            "</button></div>";
+
+        resumo += "</div>";
+
+        saida.innerHTML = resumo;
+    } catch (erro) {
+        saida.textContent = erro.message || "Não foi possível analisar a grade.";
+        console.error(erro);
+    }
+}
+
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch(console.error);
+    });
+}
+
+function limparJogo() {
+    ["casa", "fora", "competicao"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+    });
+
+    const resultado = document.getElementById("resultado");
+    if (resultado) resultado.textContent = "";
+
+    const grade = document.getElementById("grade");
+    if (grade) grade.style.display = "none";
+}
+
+
+async function abrirHistorico() {
+    const painel = document.getElementById("historico");
+    const modoJogo = document.getElementById("modoJogo");
+    const grade = document.getElementById("grade");
+
+    if (modoJogo) modoJogo.style.display = "none";
+    if (grade) grade.style.display = "none";
+    painel.style.display = "block";
+    painel.innerHTML = "Carregando histórico...";
+
+    try {
+        const response = await fetch("/api/history-analysis");
+        if (!response.ok) throw new Error("Falha ao carregar histórico.");
+
+        const data = await response.json();
+
+        if (!data.results.length) {
+            painel.innerHTML = "<div style='font-weight:normal'>Nenhuma análise registrada.</div>";
+            return;
+        }
+
+        let html = "<div style='font-size:20px;font-weight:bold;margin-bottom:12px'>Histórico</div>";
+
+        for (const item of data.results) {
+            html +=
+                "<div style='border-top:1px solid #ddd;padding:12px 0;text-align:left'>" +
+                "<div style='font-size:12px;color:#777'>" +
+                (item.competition || "") + "</div>" +
+                "<strong>" + item.home_name + " × " + item.away_name + "</strong>" +
+                "<div style='margin-top:5px;font-size:13px;font-weight:normal'>" +
+                "Resultado: <strong>" + (item.prediction || "-") + "</strong> · " +
+                "1 " + (item.p1 * 100).toFixed(1) + "% · " +
+                "X " + (item.px * 100).toFixed(1) + "% · " +
+                "2 " + (item.p2 * 100).toFixed(1) + "%" +
+                "</div></div>";
+        }
+
+        painel.innerHTML = html;
+    } catch (e) {
+        painel.innerHTML = "Não foi possível carregar o histórico.";
+        console.error(e);
+    }
+}
+
+
+function mostrarModo(modo) {
+    const modoJogo = document.getElementById("modoJogo");
+    const grade = document.getElementById("grade");
+    const historico = document.getElementById("historico");
+
+    if (modoJogo) modoJogo.style.display = modo === "jogo" ? "block" : "none";
+    if (grade) grade.style.display = modo === "grade" ? "block" : "none";
+    if (historico) historico.style.display = "none";
+
+    if (modo === "grade") abrirGrade();
+}
+
+
+function copiarGrade() {
+    const saida = document.getElementById("resultadoGrade");
+    const texto = saida.innerText || "";
+
+    if (!texto) return;
+
+    navigator.clipboard.writeText(texto)
+        .then(() => {
+            const botao = saida.querySelector("button");
+            if (botao) {
+                const original = botao.textContent;
+                botao.textContent = "COPIADO ✓";
+                setTimeout(() => botao.textContent = original, 1400);
+            }
+        })
+        .catch(() => {
+            alert("Não foi possível copiar a grade.");
+        });
+}
+
+async function compartilharGrade() {
+    const saida = document.getElementById("resultadoGrade");
+    const texto = saida.innerText || "";
+    if (!texto) return;
+
+    if (navigator.share) {
+        try {
+            await navigator.share({ title: "Grade de jogos", text: texto });
+            return;
+        } catch (e) {
+            if (e && e.name === "AbortError") return;
+        }
+    }
+
+    try {
+        await navigator.clipboard.writeText(texto);
+        alert("Grade copiada. Agora é só colar onde quiser.");
+    } catch (e) {
+        alert("Não foi possível compartilhar a grade.");
+    }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+LOTOSCANNER — PACOTE PRONTO
+
+As chaves fornecidas foram configuradas no servidor local.
+
+Para iniciar no Windows: dê duplo clique em LotoScanner_Iniciar.vbs.
+O servidor roda sem abrir uma janela de terminal e o navegador abre automaticamente.
+
+API Football: configurada.
+Big Balls Sports Data: configurada como fallback.
+
+IMPORTANTE: as chaves são segredos. Não publique este ZIP em GitHub ou outro repositório público. Se elas forem expostas, rotacione-as no painel dos respectivos provedores.
