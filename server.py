@@ -1034,6 +1034,34 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/status":
+                            
+            self.send_json(200, {
+                "api_football": bool(API_FOOTBALL_KEY),
+                "bigballs": bool(BIGBALLS_KEY)
+            })
+            return
+
+        if parsed.path == "/":
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            index_path = os.path.join(base_dir, "index.html")
+
+            try:
+                with open(index_path, "rb") as f:
+                    body = f.read()
+
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception as exc:
+                self.send_json(500, {
+                    "error": "Falha ao carregar a página.",
+                    "detail": str(exc)
+                })
+            return
+
+        self.send_json(404, {"error": "Rota não encontrada."})
             self.send_json(200, {
                 "api_football": bool(API_FOOTBALL_KEY),
                 "bigballs": bool(BIGBALLS_KEY)
