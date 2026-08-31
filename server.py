@@ -990,7 +990,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
             if parsed.path == "/api/next-fixture":
-            params = urllib.parse.parse_qs(parsed.query)
+                params = urllib.parse.parse_qs(parsed.query)
 
             home_id = params.get("home_id", [""])[0].strip()
             away_id = params.get("away_id", [""])[0].strip()
