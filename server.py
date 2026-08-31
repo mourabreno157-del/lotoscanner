@@ -989,89 +989,261 @@ class Handler(BaseHTTPRequestHandler):
                 })
             return
 
-        if parsed.path == "/api/next-fixture":
+               if parsed.path == "/api/next-fixture":
             params = urllib.parse.parse_qs(parsed.query)
+
             home_id = params.get("home_id", [""])[0].strip()
             away_id = params.get("away_id", [""])[0].strip()
             competition_name = params.get("competition", [""])[0].strip()
             competition_id = params.get("competition_id", [""])[0].strip()
 
             if not home_id or not away_id:
-                self.send_json(400, {"error": "Informe home_id e away_id."})
+                self.send_json(400, {
+                    "error": "Informe home_id e away_id."
+                })
                 return
 
             try:
                 home_provider, home_numeric = (
-                    home_id.split(":", 1) if ":" in home_id else ("api-football", home_id)
-                )
-                away_provider, away_numeric = (
-                    away_id.split(":", 1) if ":" in away_id else ("api-football", away_id)
+                    home_id.split(":", 1)
+                    if ":" in home_id
+                    else ("api-football", home_id)
                 )
 
-                if home_provider != "api-football" or away_provider != "api-football":
-                    self.send_json(404, {"error": "Jogo futuro não disponível para esse provedor."})
+                away_provider, away_numeric = (
+                    away_id.split(":", 1)
+                    if ":" in away_id
+                    else ("api-football", away_id)
+                )
+
+                # Os dois times precisam pertencer ao mesmo provedor.
+                if home_provider != away_provider:
+                    self.send_json(400, {
+                        "error": "Os times pertencem a provedores diferentes."
+                    })
                     return
 
-                data = get_json(
-                    "https://v3.football.api-sports.io/fixtures?" +
-                    urllib.parse.urlencode({
-                        "team": home_numeric,
-                        "next": 20
-                    }),
-                    {"x-apisports-key": API_FOOTBALL_KEY}
-                )
-
-                target_away = int(away_numeric)
                 fixtures = []
 
-                for item in data.get("response", []):
-                    teams = item.get("teams", {}) or {}
-                    home = teams.get("home", {}) or {}
-                    away = teams.get("away", {}) or {}
+                # =========================================================
+                # API-FOOTBALL
+                # =========================================================
+                if home_provider == "api-football":
 
-                    if home.get("id") != int(home_numeric) or away.get("id") != target_away:
-                        continue
+                    data = get_json(
+                        "https://v3.football.api-sports.io/fixtures?" +
+                        urllib.parse.urlencode({
+                            "team": home_numeric,
+                            "next": 20
+                        }),
+                        {"x-apisports-key": API_FOOTBALL_KEY}
+                    )
 
-                    fixture = item.get("fixture", {}) or {}
-                    league = item.get("league", {}) or {}
+                    target_home = int(home_numeric)
+                    target_away = int(away_numeric)
 
-                    if competition_id and str(league.get("id")) != str(competition_id):
-                        continue
-                    if competition_name and not competition_id:
-                        requested = normalize_text(competition_name)
-                        actual = normalize_text(league.get("name"))
-                        if similarity(requested, actual) < 0.45:
+                    for item in data.get("response", []):
+                        teams = item.get("teams", {}) or {}
+
+                        home = teams.get("home", {}) or {}
+                        away = teams.get("away", {}) or {}
+
+                        if home.get("id") != target_home:
                             continue
 
-                    match_date = fixture.get("date")
-                    if not match_date:
-                        continue
+                        if away.get("id") != target_away:
+                            continue
 
-                    fixtures.append({
-                        "fixture_id": fixture.get("id"),
-                        "date": match_date[:10],
-                        "datetime": match_date,
-                        "competition": league.get("name"),
-                        "competition_id": league.get("id"),
-                        "competition_provider": "api-football",
-                        "season": league.get("season"),
-                        "home_name": home.get("name"),
-                        "away_name": away.get("name")
+                        fixture = item.get("fixture", {}) or {}
+                        league = item.get("league", {}) or {}
+
+                        if competition_id:
+                            if str(league.get("id")) != str(competition_id):
+                                continue
+
+                        elif competition_name:
+                            requested = normalize_text(competition_name)
+                            actual = normalize_text(
+                                league.get("name")
+                            )
+
+                            if similarity(requested, actual) < 0.45:
+                                continue
+
+                        match_date = fixture.get("date")
+
+                        if not match_date:
+                            continue
+
+                        fixtures.append({
+                            "fixture_id": fixture.get("id"),
+                            "date": match_date[:10],
+                            "datetime": match_date,
+                            "competition": league.get("name"),
+                            "competition_id": league.get("id"),
+                            "competition_provider": "api-football",
+                            "season": league.get("season"),
+                            "home_name": home.get("name"),
+                            "away_name": away.get("name")
+                        })
+
+                # =========================================================
+                # BIGBALLS
+                # =========================================================
+                elif home_provider == "bigballs":
+
+                    if not BIGBALLS_KEY:
+                        self.send_json(503, {
+                            "error": "BIGBALLS_KEY não configurada."
+                        })
+                        return
+
+                    # Se recebemos um ID de competição, tentamos usá-lo
+                    # diretamente. Caso contrário, tentamos descobrir o slug.
+                    league_values = []
+
+                    if competition_id:
+                        league_values.append(competition_id)
+
+                    if competition_name:
+                        leagues = search_bigballs_leagues(
+                            competition_name
+                        )
+
+                        for league in leagues:
+                            slug = league.get("slug")
+
+                            if slug and slug not in league_values:
+                                league_values.append(slug)
+
+                    # Sem competição conhecida, consulta o feed geral.
+                    if not league_values:
+                        league_values.append(None)
+
+                    target_home = str(home_numeric)
+                    target_away = str(away_numeric)
+
+                    encontrados_ids = set()
+
+                    for league_value in league_values:
+
+                        for page in range(1, 11):
+
+                            query_params = {
+                                "sport": "football",
+                                "limit": 200,
+                                "page": page,
+                            }
+
+                            if league_value:
+                                query_params["league"] = league_value
+
+                            data = get_json(
+                                "https://api.bigballsdata.com/v1/matches?" +
+                                urllib.parse.urlencode(query_params),
+                                {
+                                    "Authorization":
+                                    f"Bearer {BIGBALLS_KEY}"
+                                }
+                            )
+
+                            rows = (
+                                data.get("data", [])
+                                if isinstance(data, dict)
+                                else []
+                            )
+
+                            if not rows:
+                                break
+
+                            for item in rows:
+
+                                if not isinstance(item, dict):
+                                    continue
+
+                                home = item.get("home", {}) or {}
+                                away = item.get("away", {}) or {}
+
+                                if str(home.get("id")) != target_home:
+                                    continue
+
+                                if str(away.get("id")) != target_away:
+                                    continue
+
+                                kickoff = str(
+                                    item.get("kickoff_utc")
+                                    or item.get("kickoff")
+                                    or ""
+                                )
+
+                                if not kickoff:
+                                    continue
+
+                                # Evita duplicados quando consultamos
+                                # mais de um slug/competição.
+                                fixture_id = str(item.get("id"))
+
+                                if fixture_id in encontrados_ids:
+                                    continue
+
+                                encontrados_ids.add(fixture_id)
+
+                                league_value_from_match = (
+                                    item.get("league")
+                                )
+
+                                fixtures.append({
+                                    "fixture_id":
+                                        f"bigballs:{item.get('id')}",
+                                    "date": kickoff[:10],
+                                    "datetime": kickoff,
+                                    "competition":
+                                        league_value_from_match,
+                                    "competition_id":
+                                        league_value_from_match,
+                                    "competition_provider":
+                                        "bigballs",
+                                    "season":
+                                        item.get("season"),
+                                    "home_name":
+                                        home.get("name"),
+                                    "away_name":
+                                        away.get("name")
+                                })
+
+                            if len(rows) < 200:
+                                break
+
+                else:
+                    self.send_json(400, {
+                        "error": f"Provedor não suportado: {home_provider}"
                     })
+                    return
+
+                # =========================================================
+                # RESULTADO
+                # =========================================================
 
                 if not fixtures:
                     self.send_json(404, {
-                        "error": "Não foi encontrada uma próxima partida entre esses dois times."
+                        "error":
+                        "Não foi encontrada uma próxima partida entre esses dois times."
                     })
                     return
 
-                fixtures.sort(key=lambda x: x["datetime"])
+                # Garante que pegamos o jogo mais próximo.
+                fixtures.sort(
+                    key=lambda x: x.get("datetime") or ""
+                )
+
                 self.send_json(200, fixtures[0])
+
             except Exception as exc:
                 self.send_json(502, {
                     "error": "Falha ao localizar a próxima partida.",
                     "detail": str(exc)
                 })
+
             return
 
         if parsed.path == "/api/status":
