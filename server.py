@@ -485,21 +485,29 @@ def search_bigballs(name):
         return []
 
 def identify(name):
-    local = search_local_team(name)
-    if local:
-        return local
-
+    # Primeiro tenta as APIs para obter uma identificação confiável.
     results = search_api_football(name)
+
     if results:
         for team in results:
             save_team(team)
         return results
 
+    # Se a Football API não encontrar, tenta BigBalls.
     results = search_bigballs(name)
+
     if results:
         for team in results:
             save_team(team)
-    return results
+        return results
+
+    # Só usa o banco local como último recurso.
+    local = search_local_team(name)
+
+    if local:
+        return local
+
+    return []
 
 
 
