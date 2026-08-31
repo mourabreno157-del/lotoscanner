@@ -992,16 +992,16 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/next-fixture":
             params = urllib.parse.parse_qs(parsed.query)
 
-        home_id = params.get("home_id", [""])[0].strip()
-        away_id = params.get("away_id", [""])[0].strip()
-        competition_name = params.get("competition", [""])[0].strip()
-        competition_id = params.get("competition_id", [""])[0].strip()
-
-        if not home_id or not away_id:
-            self.send_json(400, {
-                 "error": "Informe home_id e away_id."
-             })
-            return
+            home_id = params.get("home_id", [""])[0].strip()
+            away_id = params.get("away_id", [""])[0].strip()
+            competition_name = params.get("competition", [""])[0].strip()
+            competition_id = params.get("competition_id", [""])[0].strip()
+    
+            if not home_id or not away_id:
+                self.send_json(400, {
+                     "error": "Informe home_id e away_id."
+                 })
+                return
 
             try:
                 home_provider, home_numeric = (
@@ -1279,3 +1279,4 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     print("Servidor LOTOSCANNER em http://localhost:8000")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+         
