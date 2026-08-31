@@ -253,25 +253,58 @@ def identify_competition(name):
 def search_api_football(name):
     if not API_FOOTBALL_KEY:
         return []
-    query = urllib.parse.quote(name)
-    data = get_json(
-        f"https://v3.football.api-sports.io/teams?search={query}",
-        {"x-apisports-key": API_FOOTBALL_KEY}
-    )
-    result = []
-    for item in data.get("response", []):
-        team = item.get("team", {}) or {}
-        result.append({
-            "provider": "api-football",
-            "id": team.get("id"),
-            "canonical_id": f"api-football:{team.get('id')}",
-            "name": team.get("name"),
-            "short_name": team.get("code"),
-            "country": team.get("country"),
-            "logo": team.get("logo"),
-            "venue": item.get("venue", {})
-        })
-    return rank_results(name, result, "name", 10)
+
+    consultas = []
+    nome = (name or "").strip()
+
+    if nome:
+        consultas.append(nome)
+
+        partes = nome.split()
+        if len(partes) > 1:
+            consultas.extend(partes)
+
+    consultas = list(dict.fromkeys(consultas))
+
+    encontrados = []
+
+    for consulta in consultas:
+        try:
+            query = urllib.parse.quote(consulta)
+
+            data = get_json(
+                f"https://v3.football.api-sports.io/teams?search={query}",
+                {"x-apisports-key": API_FOOTBALL_KEY}
+            )
+
+            for item in data.get("response", []):
+                team = item.get("team", {}) or {}
+
+                if not team.get("id"):
+                    continue
+
+                encontrados.append({
+                    "provider": "api-football",
+                    "id": team.get("id"),
+                    "canonical_id": f"api-football:{team.get('id')}",
+                    "name": team.get("name"),
+                    "short_name": team.get("code"),
+                    "country": team.get("country"),
+                    "logo": team.get("logo"),
+                    "venue": item.get("venue", {})
+                })
+
+        except Exception:
+            continue
+
+    # Remove duplicados mantendo a primeira ocorrência
+    unicos = {}
+    for team in encontrados:
+        unicos[team["id"]] = team
+
+    encontrados = list(unicos.values())
+
+    return rank_results(name, encontrados, "name", 10)
 
 
 
