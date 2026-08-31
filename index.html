@@ -314,8 +314,6 @@ async function analisar() {
 
         resultado.textContent = "Executando matemática...";
 
-        // A etapa de análise será executada pelo motor Python.
-        // Por enquanto exibimos os dados identificados e o histórico coletado.
         const homeId = casaTeam.canonical_id || casaTeam.id;
         const awayId = foraTeam.canonical_id || foraTeam.id;
         const analise = await fetch(
@@ -370,7 +368,7 @@ async function analisar() {
         console.log("RESULTADO:", resultadoMotor);
 
     } catch (erro) {
-        resultado.textContent = "Banco salvo. Servidor de identificação não conectado.";
+        resultado.textContent = erro.message || "Não foi possível concluir a análise.";
         console.error(erro);
     }
 }
@@ -424,9 +422,6 @@ async function analisarGrade() {
     saida.textContent = "Aguardando identificação dos 14 jogos...";
 
     try {
-        // Identificação simples: primeiro resultado disponível de cada time.
-        // A etapa seguinte poderá transformar esses resultados em IDs antes
-        // de chamar o motor, sem alterar a matemática.
         for (const jogo of jogos) {
             const [a, b] = await Promise.all([
                 fetch("/api/identify?name=" + encodeURIComponent(jogo.casa)),
@@ -543,7 +538,6 @@ function limparJogo() {
     if (grade) grade.style.display = "none";
 }
 
-
 async function abrirHistorico() {
     const painel = document.getElementById("historico");
     const modoJogo = document.getElementById("modoJogo");
@@ -588,7 +582,6 @@ async function abrirHistorico() {
     }
 }
 
-
 function mostrarModo(modo) {
     const modoJogo = document.getElementById("modoJogo");
     const grade = document.getElementById("grade");
@@ -600,7 +593,6 @@ function mostrarModo(modo) {
 
     if (modo === "grade") abrirGrade();
 }
-
 
 function copiarGrade() {
     const saida = document.getElementById("resultadoGrade");
